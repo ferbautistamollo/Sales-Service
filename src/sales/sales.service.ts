@@ -613,6 +613,9 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
           qrId,
           dataResponse: {
             personId: saleContext.personId,
+            fullName: saleContext.fullName,
+            identityCard: saleContext.identityCard,
+            nup: saleContext.nup,
             receptionist: saleContext.receptionist,
             paymentTypeId: saleContext.paymentTypeId,
             parameterId: saleContext.parameterId,
@@ -715,8 +718,9 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
         ...transactionData,
         accountNumber: resolvedAccountNumber,
       };
+
       const { serviceStatus, data } = await this.nats.firstValue(
-        'collections.createTransaction',
+        'collections.transactions.create',
         transaction,
       );
 
@@ -837,6 +841,9 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
           code,
           saleState,
           personId: saleContext.personId,
+          fullName: saleContext.fullName,
+          identityCard: saleContext.identityCard,
+          nup: saleContext.nup,
           receptionist: saleContext.receptionist,
           parameter: saleContext.parameter,
         }),
@@ -1374,10 +1381,6 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
       return currentQrPayment?.qrStatus ?? nextStatus;
     }
 
-    if (nextStatus !== QrPaymentStatus.PENDIENTE) {
-      await this.removeTemporaryQrImage(qrPayment.qrId);
-    }
-
     return nextStatus;
   }
 
@@ -1557,10 +1560,6 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
     qrPayment.qrStatus = qrStatus;
     await this.qrPaymentSaleRepository.save(qrPayment);
 
-    if (qrStatus !== QrPaymentStatus.PENDIENTE) {
-      await this.removeTemporaryQrImage(qrPayment.qrId);
-    }
-
     const data = {
       qrId: qrPayment.qrId,
       qrStatus,
@@ -1586,7 +1585,6 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
       notification,
     );
     await this.qrPaymentSaleRepository.save(qrPayment);
-    await this.removeTemporaryQrImage(qrPayment.qrId);
 
     const data = {
       qrId: qrPayment.qrId,
@@ -1675,7 +1673,6 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
       qrPayment,
       paymentNotification: notification,
     });
-    await this.removeTemporaryQrImage(qrPayment.qrId);
 
     const data = {
       qrId: qrPayment.qrId,
@@ -1876,21 +1873,6 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
         error,
       );
       return null;
-    }
-  }
-
-  private async removeTemporaryQrImage(qrId: string): Promise<void> {
-    try {
-      const { serviceStatus, data } = await this.nats.firstValue(
-        'ftp.removeDataTmp',
-        this.buildQrTemporaryFilePayload(qrId),
-      );
-
-      if (!serviceStatus || data?.statusRemoved !== true) {
-        this.logger.warn(`No se pudo eliminar la imagen QR temporal ${qrId}`);
-      }
-    } catch (error) {
-      this.logError(`No se pudo eliminar la imagen QR temporal ${qrId}`, error);
     }
   }
 
@@ -2124,6 +2106,9 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
     data: CreateSaleDto | GenerateQrDto,
   ): Promise<any> {
     const personId = data.personId;
+    const fullName = data.fullName;
+    const identityCard = data.identityCard;
+    const nup = data.nup;
     const receptionist = data.receptionist.trim();
     const paymentTypeId = data.paymentTypeId;
     const parameterId = data.parameterId;
@@ -2244,6 +2229,9 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
     return {
       error: false,
       personId,
+      fullName,
+      identityCard,
+      nup,
       receptionist,
       paymentTypeId,
       parameterId,
@@ -2492,12 +2480,16 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
   }
 
   private formatDate(date: Date): string {
-    const pad = (value: number) => String(value).padStart(2, '0');
-
-    return [
-      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
-      `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`,
-    ].join(' ');
+    return new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'America/La_Paz',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(date).replace(',', '');
   }
 
   private buildBcbQrPayload(
@@ -2600,7 +2592,181 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
 
   async voucherPdf(saleId: number): Promise<any> {
     try {
-      return await this.buildVoucherPdfResponse(saleId);
+      const sale = await this.salesRepository.findOne({
+        select: {
+          id: true,
+          code: true,
+          saleState: true,
+          personId: true,
+          receptionist: true,
+          createdAt: true,
+          parameter: {
+            id: true,
+            currencySymbol: true,
+          },
+          saleProducts: {
+            id: true,
+            name: true,
+            amount: true,
+            price: true,
+            total: true,
+            fileNumber: {
+              id: true,
+              fileNumber: true,
+            },
+            product: {
+              id: true,
+              group: {
+                name: true,
+              },
+            },
+          },
+          voucher: {
+            id: true,
+            customer: true,
+            identityCardCustomer: true,
+            paymentLocation: true,
+            receiptNumber: true,
+            description: true,
+            paymentTypeState: true,
+            depositDate: true,
+            total: true,
+            createdAt: true,
+            paymentType: {
+              id: true,
+              name: true,
+              shortened: true,
+            },
+          },
+        },
+        where: { id: saleId },
+        relations: {
+          parameter: true,
+          saleProducts: {
+            fileNumber: true,
+            product: {
+              group: true,
+            },
+          },
+          voucher: {
+            paymentType: true,
+          },
+        },
+      });
+
+      if (!sale) {
+        return {
+          error: true,
+          message: 'Venta no encontrada.',
+        }
+      }
+
+      if(sale.saleState == SaleState.ANULADO) {
+        return {
+          error: true,
+          message: 'Solo se puede generar comprobante de ventas en estado vigente.',
+        }
+      }
+
+      const voucher = sale.voucher;
+
+      if (!voucher) {
+        return {
+          error: true,
+          message: 'No se encontró el comprobante de la venta.',
+        }
+      }
+
+      const personResult = await this.personDetailsById(sale.personId);
+
+      if (personResult.error || !personResult.data) {
+        throw new RpcException({
+          code: HttpStatus.NOT_FOUND,
+          message:
+            personResult.message ??
+            'No se pudieron obtener los datos del titular de la venta.',
+        });
+      }
+
+      const principalCustomer = personResult.data;
+      const paymentType = voucher.paymentType;
+      const products = sale.saleProducts ?? [];
+
+      const data = {
+        sale: {
+          code: this.formatSaleCode(sale.code, sale.createdAt),
+          state: sale.saleState,
+          personId: sale.personId,
+          receptionist: sale.receptionist,
+          createdAt: this.formatDate(sale.createdAt),
+        },
+        principalCustomer: {
+          fullName: principalCustomer.fullName,
+          identityCard: principalCustomer.identityCard,
+        },
+        payer: {
+          customer: voucher.customer,
+          identityCardCustomer: voucher.identityCardCustomer,
+          isThirdParty: this.isThirdPartyPayer(
+            principalCustomer.identityCard,
+            voucher.identityCardCustomer,
+          ),
+        },
+        voucher: {
+          receiptNumber: voucher.receiptNumber,
+          description: voucher.description,
+          paymentTypeState: voucher.paymentTypeState,
+          depositDate: voucher.depositDate
+            ? this.formatDate(voucher.depositDate)
+            : null,
+          paymentLocation: voucher.paymentLocation,
+          createdAt: this.formatDate(voucher.createdAt),
+          total: this.formatAmount(voucher.total),
+        },
+        payment: {
+          type: paymentType
+            ? {
+                name: paymentType.name,
+                shortened: paymentType.shortened,
+              }
+            : null,
+        },
+        currency: {
+          symbol: sale.parameter?.currencySymbol ?? null,
+        },
+        products: products.map((product) => {
+          const fileNumbers = product.fileNumber;
+
+          return {
+            productId: product.product.id,
+            name: product.name,
+            groupName: product.product.group.name.toUpperCase(),
+            fileNumbers,
+            amount: product.amount,
+            price: this.formatAmount(product.price),
+            total: this.formatAmount(product.total),
+          };
+        }),
+        totals: {
+          productCount: products.length,
+          quantity: products.reduce(
+            (total, product) => total + Number(product.amount ?? 0),
+            0,
+          ),
+          amount: this.formatAmount(voucher.total),
+        },
+        metadata: {
+          source: 'Sales-Service',
+          generatedFor: 'receipt',
+          generatedAt: this.formatDate(new Date()),
+        },
+      };
+
+      return {
+        error: false,
+        message: 'Detalle de venta obtenido correctamente.',
+        data,
+      };
     } catch (error) {
       if (error instanceof RpcException) {
         throw error;
@@ -2613,190 +2779,6 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
         message: 'Error al obtener el detalle de la venta.',
       });
     }
-  }
-
-  private async buildVoucherPdfResponse(saleId: number): Promise<any> {
-    const sale = await this.salesRepository.findOne({
-      select: {
-        id: true,
-        code: true,
-        saleState: true,
-        personId: true,
-        receptionist: true,
-        createdAt: true,
-        parameter: {
-          id: true,
-          currencySymbol: true,
-        },
-        saleProducts: {
-          id: true,
-          name: true,
-          amount: true,
-          price: true,
-          total: true,
-          fileNumber: {
-            id: true,
-            fileNumber: true,
-          },
-          product: {
-            id: true,
-            group: {
-              name: true,
-            },
-          },
-        },
-        voucher: {
-          id: true,
-          customer: true,
-          identityCardCustomer: true,
-          paymentLocation: true,
-          receiptNumber: true,
-          description: true,
-          paymentTypeState: true,
-          depositDate: true,
-          total: true,
-          createdAt: true,
-          paymentType: {
-            id: true,
-            name: true,
-            shortened: true,
-          },
-        },
-      },
-      where: { id: saleId },
-      relations: {
-        parameter: true,
-        saleProducts: {
-          fileNumber: true,
-          product: {
-            group: true,
-          },
-        },
-        voucher: {
-          paymentType: true,
-        },
-      },
-    });
-
-    if (!sale) {
-      throw new RpcException({
-        code: HttpStatus.NOT_FOUND,
-        message: `La venta con el ID ${saleId} no existe.`,
-      });
-    }
-
-    const voucher = sale.voucher;
-
-    if (!voucher) {
-      throw new RpcException({
-        code: HttpStatus.NOT_FOUND,
-        message: 'La venta no tiene comprobante asociado.',
-      });
-    }
-
-    const personResult = await this.personDetailsById(sale.personId);
-
-    if (personResult.error || !personResult.data) {
-      throw new RpcException({
-        code: HttpStatus.NOT_FOUND,
-        message:
-          personResult.message ??
-          'No se pudieron obtener los datos del titular de la venta.',
-      });
-    }
-
-    const principalCustomer = personResult.data;
-    const paymentType = voucher.paymentType;
-    const products = sale.saleProducts ?? [];
-
-    const data = {
-      sale: {
-        code: this.formatSaleCode(sale.code, sale.createdAt),
-        state: sale.saleState,
-        personId: sale.personId,
-        receptionist: sale.receptionist,
-        createdAt: this.formatDate(sale.createdAt),
-      },
-      principalCustomer: {
-        fullName: principalCustomer.fullName,
-        identityCard: principalCustomer.identityCard,
-      },
-      payer: {
-        customer: voucher.customer,
-        identityCardCustomer: voucher.identityCardCustomer,
-        isThirdParty: this.isThirdPartyPayer(
-          principalCustomer.identityCard,
-          voucher.identityCardCustomer,
-        ),
-      },
-      voucher: {
-        receiptNumber: voucher.receiptNumber,
-        description: voucher.description,
-        paymentTypeState: voucher.paymentTypeState,
-        depositDate: voucher.depositDate
-          ? this.formatDate(voucher.depositDate)
-          : null,
-        paymentLocation: voucher.paymentLocation,
-        createdAt: this.formatDate(voucher.createdAt),
-        total: this.formatAmount(voucher.total),
-      },
-      payment: {
-        type: paymentType
-          ? {
-              name: paymentType.name,
-              shortened: paymentType.shortened,
-            }
-          : null,
-      },
-      currency: {
-        symbol: sale.parameter?.currencySymbol ?? null,
-      },
-      products: products.map((product) => {
-        const fileNumbers = product.fileNumber;
-
-        return {
-          productId: product.product.id,
-          name: product.name,
-          groupName: product.product.group.name.toUpperCase(),
-          fileNumbers,
-          amount: product.amount,
-          price: this.formatAmount(product.price),
-          total: this.formatAmount(product.total),
-        };
-      }),
-      totals: {
-        productCount: products.length,
-        quantity: products.reduce(
-          (total, product) => total + Number(product.amount ?? 0),
-          0,
-        ),
-        amount: this.formatAmount(voucher.total),
-      },
-      metadata: {
-        source: 'Sales-Service',
-        generatedFor: 'receipt',
-        generatedAt: this.formatDate(new Date()),
-      },
-    };
-
-    return {
-      error: false,
-      message: 'Detalle de venta obtenido correctamente.',
-      data,
-    };
-  }
-
-  async reportAllSales(filters: SalesListDto = {}): Promise<any> {
-
-    console.log(filters);
-
-
-    return {
-      error: false,
-      message: 'Listado de ventas obtenido correctamente.',
-      //data,
-    };
-
   }
 
   private isThirdPartyPayer(
@@ -2914,7 +2896,7 @@ export class SalesService implements OnModuleInit, OnModuleDestroy {
   }
 
   async forGenerateReport(): Promise<any> {
-    
+
     const groups = await this.groupsRepository.find({
       select: {
         id: true,
