@@ -27,7 +27,7 @@ import { Voucher } from './voucher.entity';
 @Index('IDX_sales_parameter_id', ['parameter'])
 @Index('UQ_sales_transaction_id', ['transactionId'], {
   unique: true,
-  where: '"transaccion_id" IS NOT NULL',
+  where: '"transaction_id" IS NOT NULL',
 })
 export class Sale {
   @PrimaryGeneratedColumn()
@@ -48,10 +48,19 @@ export class Sale {
   @Column({ name: 'person_id', type: 'int' })
   personId: number;
 
+  @Column({ name: 'full_name', length: 100 })
+  fullName: string;
+
+  @Column({ name: 'identity_card', length: 20 })
+  identityCard: string;
+
+  @Column({ name: 'nup', length: 20 })
+  nup: string;
+
   @Column({ length: 100 })
   receptionist: string;
 
-  @Column({ name: 'transaccion_id', length: 50, nullable: true })
+  @Column({ name: 'transaction_id', length: 50, nullable: true })
   transactionId: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

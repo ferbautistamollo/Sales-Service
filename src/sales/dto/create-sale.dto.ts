@@ -75,6 +75,20 @@ export class CreateSaleDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
+  fullName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  identityCard: string;
+
+  @IsInt()
+  @IsPositive()
+  nup: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
   receptionist: string;
 
   @IsInt()
