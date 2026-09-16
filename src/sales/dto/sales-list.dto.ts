@@ -13,6 +13,10 @@ export class SalesListDto extends PaginationDto {
   @IsOptional()
   @IsString()
   productIds?: string;
+
+  @IsOptional()
+  @IsString()
+  user?: string;
 }
 
 export class SalesListProductReportDto {

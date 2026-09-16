@@ -83,11 +83,6 @@ export class SalesController {
     return this.salesService.voucherPdf(saleId);
   }
 
-  @MessagePattern('sales.reportAllSales')
-  async reportAllSales(@Payload() filters: SalesListDto) {
-    return this.salesService.reportAllSales(filters);
-  }
-
   @MessagePattern('sales.personSalesRecords')
   async getPersonSalesRecords(
     @Payload('personId', ParseIntPipe) personId: number,
