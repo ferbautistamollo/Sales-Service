@@ -585,13 +585,31 @@ export class CreateSalesSchemaAndCoreTables1763052000000
             isNullable: false,
           },
           {
+            name: "full_name",
+            type: "varchar",
+            length: "100",
+            isNullable: false,
+          },
+          {
+            name: "identity_card",
+            type: "varchar",
+            length: "20",
+            isNullable: false,
+          },
+          {
+            name: "nup",
+            type: "varchar",
+            length: "20",
+            isNullable: false,
+          },
+          {
             name: "receptionist",
             type: "varchar",
             length: "100",
             isNullable: false,
           },
           {
-            name: "transaccion_id",
+            name: "transaction_id",
             type: "varchar",
             length: "50",
             isNullable: true,
@@ -646,8 +664,8 @@ export class CreateSalesSchemaAndCoreTables1763052000000
 
     await queryRunner.query(
       `CREATE UNIQUE INDEX IF NOT EXISTS "UQ_sales_transaction_id"
-       ON "${this.schema}"."sales" ("transaccion_id")
-       WHERE "transaccion_id" IS NOT NULL`
+       ON "${this.schema}"."sales" ("transaction_id")
+       WHERE "transaction_id" IS NOT NULL`
     );
   }
 
